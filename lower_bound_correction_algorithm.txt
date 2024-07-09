@@ -1,0 +1,17 @@
+given a matrix C of dimensions nxn, we have three steps
+step 1:
+replace each column of C by the SoftMax of that column
+denote the new matrix C'
+step 2: 
+for each row of C' such that the sum of the elements of that row is greater than 1, normalize that row by dividing the row by the sum of it's elements.
+denote the new matrix C''
+step 3:
+compute:
+r = the vector of sums of each row's elements
+c = the vector of sums of each column's elements
+denote: 
+r_tild = the ones vector of dimension n minus r
+c_tild = the ones vector of dimension n minus c
+
+output:
+C'' + (1/(sum of c_tilds elements))*(r_tild*c_tild^T)
