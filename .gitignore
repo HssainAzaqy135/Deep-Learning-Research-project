@@ -2,3 +2,4 @@ env/
 Trained_models/
 data/
 miscellaneous/
+model_weights.pth
