@@ -45,6 +45,43 @@ def primal_sol(out_put_mat,distances_mat):
     dot_product = torch.dot(B, D)
     return torch.sqrt(dot_product)
 
+def primal_projection(matrix,axis = None):
+    ret_mat = normalize_matrix_axis(matrix = softmax(matrix = matrix,axis = axis),axis = axis).clone()
+    r = get_axis_sums(ret_mat,axis = 1)
+    c = get_axis_sums(ret_mat,axis = 0)
+    r_tild = torch.ones(len(ret_mat), device=matrix.device) - r
+    c_tild = torch.ones(len(ret_mat[0]), device=matrix.device) - c
+    ret_mat = ret_mat + (1 / torch.sum(c_tild)) * torch.outer(r_tild, c_tild)
+    return ret_mat
+def dual_projection(f, g, cost):
+    """
+    Perform dual projection to obtain f_ret and g_ret.
+    
+    Parameters:
+    f (torch.Tensor): A 1D tensor with the f values.
+    g (torch.Tensor): A 1D tensor with the g values.
+    cost (torch.Tensor): A 2D tensor with cost values where cost[i][k] is the cost value.
+
+    Returns:
+    torch.Tensor: f_ret tensor.
+    torch.Tensor: g_ret tensor.
+    """
+    # Ensure input tensors are on the same device
+    device = f.device
+    
+    # Compute g_ret (which is simply g)
+    g_ret = g.clone()
+    
+    # Compute the cost matrix subtraction
+    cost_minus_g = cost - g.unsqueeze(1)  # Broadcasting to subtract g from each column in cost
+    
+    # Compute min_over_k(cost[i][k] - g[k])
+    min_cost_minus_g = torch.min(cost_minus_g, dim=1).values
+    
+    # Compute f_ret
+    f_ret = torch.minimum(f, min_cost_minus_g)
+    
+    return f_ret, g_ret
 
 def dual_sol(f,g,distances_mat):
     projected_f,projected_g = dual_projection(f=f, g=g , cost =distances_mat)
