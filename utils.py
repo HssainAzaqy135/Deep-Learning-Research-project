@@ -1,6 +1,9 @@
 import torch
 import numpy as np
 import pandas as pd
+from scipy.optimize import linear_sum_assignment
+import itertools
+
 # -----------------------------------------------
 def softmax(matrix,axis = None,T=1):
     exp_matrix = torch.exp(matrix/T - torch.max(matrix, dim=axis, keepdim=True).values)
@@ -111,5 +114,77 @@ def generate_vector_batches(count: int, dim: int, n: int, device: torch.device, 
     batches = (2 * torch.rand((count, 2, n, dim), device=device) - 1) * coord_max
     
     return batches
+
+
+def wass_hungarian(batch):
+    """
+    Given two sets of d-dimensional vectors, each of size n, computes the Wasserstein p=2 distance between them.
+    
+    This distance is found by using the Hungarian algorithm to find the optimal matching 
+    that minimizes the sum of squared distances between corresponding vectors.
+    
+    Parameters:
+    - batch: tensor of shape (2, n, d), where batch[0] and batch[1] are the two sets of n vectors to be compared.
+    
+    Returns:
+    - Wasserstein distance (p=2) between the two sets of vectors.
+    """
+    
+    # Extract the two sets of vectors
+    vectors1 = batch[0]  # Shape: (n, d)
+    vectors2 = batch[1]  # Shape: (n, d)
+
+    # Compute the squared Euclidean distance matrix using broadcasting
+    distance_matrix = torch.sum((vectors1[:, None, :] - vectors2[None, :, :]) ** 2, dim=-1)
+
+    # Use the Hungarian algorithm to find the optimal assignment
+    row_ind, col_ind = linear_sum_assignment(distance_matrix.cpu().numpy())
+
+    # Calculate the total minimum distance
+    min_squared_distance = distance_matrix[row_ind, col_ind].sum()
+
+    # Return the Wasserstein distance (p=2)
+    return torch.sqrt(min_squared_distance)
+
+def wass_permutations(batch, device):
+    """
+    Given two lists of d-dimensional vectors, each of size n, computes the Wasserstein p=2 distance between them.
+    
+    This distance is found by checking every possible permutation of vector couplings and selecting the one 
+    that minimizes the sum of squared distances between corresponding vectors.
+    
+    Parameters:
+    - batch: tensor of shape (2, n, d), where batch[0] and batch[1] are the two sets of n vectors to be compared.
+    - device: 'cpu' or 'cuda' for GPU computation.
+    
+    Returns:
+    - Wasserstein distance (p=2) between the two sets of vectors.
+    """
+    # Move batch to specified device (CPU or GPU)
+    batch = batch.to(device)
+    
+    vectors1 = batch[0]
+    vectors2 = batch[1]
+    n = vectors1.shape[0]
+
+    # Generate all permutations of size n
+    all_permutations = list(itertools.permutations(range(n)))
+
+    min_squared_distance = float('inf')
+
+    # Loop over all permutations
+    for perm in all_permutations:
+        # Create an index tensor for the current permutation
+        perm_tensor = torch.tensor(perm, device=device)
+
+        # Compute the squared distance for this permutation
+        squared_distance_sum = torch.sum((vectors1 - vectors2[perm_tensor]) ** 2)
+
+        # Update minimum distance
+        if squared_distance_sum < min_squared_distance:
+            min_squared_distance = squared_distance_sum.item()  # Convert to Python float for comparison
+
+    # Return the Wasserstein distance (sqrt of minimum squared distance)
+    return torch.sqrt(torch.tensor(min_squared_distance, device=device))
 
 
