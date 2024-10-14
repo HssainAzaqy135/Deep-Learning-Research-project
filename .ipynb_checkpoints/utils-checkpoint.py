@@ -69,9 +69,6 @@ def dual_projection(f, g, cost):
     torch.Tensor: f_ret tensor.
     torch.Tensor: g_ret tensor.
     """
-    # Ensure input tensors are on the same device
-    device = f.device
-    
     # Compute g_ret (which is simply g)
     g_ret = g.clone()
     
@@ -87,7 +84,7 @@ def dual_projection(f, g, cost):
     return f_ret, g_ret
 
 def dual_sol(f,g,distances_mat):
-    projected_f,projected_g = dual_projection(f=f, g=g , cost =distances_mat)
+    projected_f,projected_g = dual_projection(f=f, g=g , cost =(distances_mat**2))# Changed Distances to squared
     return torch.sum(projected_f + projected_g) 
     
 def generate_vector_batches(count: int, dim: int, n: int, device: torch.device, coord_max: float, seed: int = 42):
