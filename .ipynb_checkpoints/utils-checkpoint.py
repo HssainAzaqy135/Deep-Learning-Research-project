@@ -56,6 +56,7 @@ def primal_projection(matrix,axis = None):
     c_tild = torch.ones(len(ret_mat[0]), device=matrix.device) - c
     ret_mat = ret_mat + (1 / torch.sum(c_tild)) * torch.outer(r_tild, c_tild)
     return ret_mat
+    
 def dual_projection(f, g, cost):
     """
     Perform dual projection to obtain f_ret and g_ret.
@@ -83,9 +84,11 @@ def dual_projection(f, g, cost):
     
     return f_ret, g_ret
 
-def dual_sol(f,g,distances_mat):
-    projected_f,projected_g = dual_projection(f=f, g=g , cost =(distances_mat**2))# Changed Distances to squared
-    return torch.sum(projected_f + projected_g) 
+def dual_sol(f, g, distances_mat):
+    projected_f, projected_g = dual_projection(f=f, g=g, cost=(distances_mat**2))  # Changed distances to squared
+    sum_result = torch.sum(projected_f + projected_g)
+    max_val = torch.maximum(sum_result, torch.tensor(0.0))  # Take the max of the sum and zero
+    return torch.sqrt(max_val)
     
 def generate_vector_batches(count: int, dim: int, n: int, device: torch.device, coord_max: float, seed: int = 42):
     """
