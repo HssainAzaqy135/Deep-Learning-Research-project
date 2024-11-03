@@ -13,7 +13,7 @@ def softmax(matrix,axis = None,T=1):
 
 def normalize_axis(to_normalize, axis=None):
     axis_sum = torch.sum(to_normalize, dim=axis, keepdim=True)
-    
+    axis_sum = torch.clamp(axis_sum, min=1e-5)#Some small epsilon for preventing nan's
     # Normalize only if the sum is greater than 1
     if torch.any(axis_sum > 1):
         return to_normalize / axis_sum
@@ -28,34 +28,118 @@ def normalize_matrix_axis(matrix,axis = None):
 def get_axis_sums(matrix,axis = None):
     return torch.sum(matrix, dim=axis)
 
+# Helper function to check for NaN or Inf values
+def check_for_nan_inf(tensor, name):
+    print_flag = False
+    if isinstance(tensor, torch.Tensor):
+        if torch.isnan(tensor).any():
+            print(f"NaN detected in {name}")
+            print_flag = True
+        if not torch.isfinite(tensor).all():
+            print(f"Inf or -Inf detected in {name}")
+            print_flag = True
+    elif isinstance(tensor, float):
+        if math.isnan(tensor):
+            print(f"NaN detected in {name} (float value)")
+            print_flag = True
+    if print_flag:
+        print(f"Problematic Nan value Name: {name}")
+        print(f"Value: {tensor}")
 
-def primal_projection(matrix,axis = None):
-    ret_mat = normalize_matrix_axis(matrix = softmax(matrix = matrix,axis = axis),axis = axis).clone()
-    r = get_axis_sums(ret_mat,axis = 1)
-    c = get_axis_sums(ret_mat,axis = 0)
+def primal_projection(matrix, axis=None):
+    # Check for NaNs or Infs in the input matrix
+    if torch.isnan(matrix).any() or not torch.isfinite(matrix).all():
+        print("Input matrix contains NaNs or Infs")
+
+    softmax_matrix = softmax(matrix=matrix, axis=axis)
+    # check_for_nan_inf(softmax_matrix, "softmax_matrix")
+
+    normalized_matrix = normalize_matrix_axis(matrix=softmax_matrix, axis=axis).clone()
+    # check_for_nan_inf(normalized_matrix, "normalized_matrix")
+
+    ret_mat = normalized_matrix
+
+    r = get_axis_sums(ret_mat, axis=1)
+    # check_for_nan_inf(r, "r (row sums)")
+
+    c = get_axis_sums(ret_mat, axis=0)
+    # check_for_nan_inf(c, "c (column sums)")
+
     r_tild = torch.ones(len(ret_mat), device=matrix.device) - r
+    # check_for_nan_inf(r_tild, "r_tild")
+
     c_tild = torch.ones(len(ret_mat[0]), device=matrix.device) - c
-    ret_mat = ret_mat + (1 / torch.sum(c_tild)) * torch.outer(r_tild, c_tild)
+    # check_for_nan_inf(c_tild, "c_tild")
+
+    c_tild_sum = torch.sum(c_tild)
+    if c_tild_sum <= 1e-5:
+        c_tild_sum = 1e-5  # Small epsilon to prevent division by zero
+    # check_for_nan_inf(torch.tensor([c_tild_sum]), "c_tild_sum")
+
+    outer_product = torch.outer(r_tild, c_tild)
+    # check_for_nan_inf(outer_product, "outer_product")
+
+    ret_mat = ret_mat + (1 / c_tild_sum) * outer_product
+    # check_for_nan_inf(ret_mat, "ret_mat (final result)")
+
     return ret_mat
 
-def primal_sol(out_put_mat,distances_mat):
-    # Flatten the matrices
-    bi_stoch_mat = primal_projection(out_put_mat,axis = 0)
+# ---------------------------------------------------
+
+def primal_sol(out_put_mat, distances_mat):
+    # Step 1: Apply primal_projection
+    bi_stoch_mat = primal_projection(out_put_mat, axis=0)
+    # check_for_nan_inf(bi_stoch_mat, "bi_stoch_mat (after primal_projection)")
+
+    # Step 2: Flatten the matrices
     B = bi_stoch_mat.view(-1)
     D = (distances_mat**2).view(-1)
-    
-    # Compute the dot product of the flattened matrices
-    dot_product = torch.dot(B, D)
-    return torch.sqrt(dot_product)
 
-def primal_projection(matrix,axis = None):
-    ret_mat = normalize_matrix_axis(matrix = softmax(matrix = matrix,axis = axis),axis = axis).clone()
-    r = get_axis_sums(ret_mat,axis = 1)
-    c = get_axis_sums(ret_mat,axis = 0)
-    r_tild = torch.ones(len(ret_mat), device=matrix.device) - r
-    c_tild = torch.ones(len(ret_mat[0]), device=matrix.device) - c
-    ret_mat = ret_mat + (1 / torch.sum(c_tild)) * torch.outer(r_tild, c_tild)
-    return ret_mat
+    # # Step 3: Check NaN in B and D before dot product
+    # check_for_nan_inf(B, "B (flattened bi_stoch_mat)")
+    # check_for_nan_inf(D, "D (flattened distances_mat squared)")
+
+    # # If NaNs are detected in B or D, return NaN tensor immediately
+    # if torch.isnan(B).any():
+    #     print("NaN detected in B before dot product")
+    #     return torch.tensor(float('nan'), device=out_put_mat.device)
+    # if torch.isnan(D).any():
+    #     print("NaN detected in D before dot product")
+    #     return torch.tensor(float('nan'), device=out_put_mat.device)
+
+    # Step 4: Compute the dot product
+    dot_product = torch.dot(B, D)
+    # check_for_nan_inf(dot_product, "dot_product")
+
+    # Return the result
+    return torch.sqrt(torch.abs(dot_product))
+
+# ---------------------------------------------------
+
+# def primal_sol(out_put_mat,distances_mat):
+#     # Flatten the matrices
+#     bi_stoch_mat = primal_projection(out_put_mat,axis = 0)
+#     B = bi_stoch_mat.view(-1)
+#     D = (distances_mat**2).view(-1)
+#     if torch.isnan(B).any():
+#         print("NaN detected in B  before dot product")
+#         return torch.tensor(float('nan'), device=out_put_mat.device)  # Handle NaN gracefully
+#     if torch.isnan(D).any():
+#         print("NaN detected in D  before dot product")
+#         return torch.tensor(float('nan'), device=out_put_mat.device)  # Handle NaN gracefully
+
+#     # Compute the dot product of the flattened matrices
+#     dot_product = torch.dot(B, D)
+#     return torch.sqrt(torch.abs(dot_product))
+# # -----------------------------------------------------
+# def primal_projection(matrix,axis = None):
+#     ret_mat = normalize_matrix_axis(matrix = softmax(matrix = matrix,axis = axis),axis = axis).clone()
+#     r = get_axis_sums(ret_mat,axis = 1)
+#     c = get_axis_sums(ret_mat,axis = 0)
+#     r_tild = torch.ones(len(ret_mat), device=matrix.device) - r
+#     c_tild = torch.ones(len(ret_mat[0]), device=matrix.device) - c
+#     ret_mat = ret_mat + (1 / torch.sum(c_tild)) * torch.outer(r_tild, c_tild)
+#     return ret_mat
     
 def dual_projection(f, g, cost):
     """
